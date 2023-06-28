@@ -1,1 +1,1 @@
-"# Demonstrator" 
+"Repository für den Softwaredemonstrator"
