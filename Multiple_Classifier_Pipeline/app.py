@@ -11,23 +11,36 @@ import os
 from werkzeug.datastructures import FileStorage
 from enum import Enum
 from sqlalchemy import JSON
-from flask_wtf import FlaskForm
-from wtforms import StringField, SelectField, SelectMultipleField, SubmitField
-from wtforms.validators import DataRequired
 import trimesh
 import gmsh
 import threading
-#import pygmsh
 import sqlite3
+
+from utils import binvox_rw
+import numpy as np
+import torch
+import trimesh
+import os
+import subprocess
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
 app.config['SECRET_KEY'] = 'your-secret-key'
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///vorplanml.db'
 
+model_Drahterodieren = torch.jit.load('./model/model_DE_2023-06-22_19-44-33.pt') # map_location=torch.device('cuda:0'), if model should be loaded to GPU, by default CPU
+model_Fraesen_Drehen = torch.jit.load('./model/model_F&D_2023-06-23_12-46-35.pt') # map_location=torch.device('cuda:0'), if model should be loaded to GPU, by default CPU
+model_Schleifen = torch.jit.load('./model/model_Sch_2023-06-22_19-44-33.pt')
+model_R_Modell = torch.jit.load('./model/best_model_cnn_lstm.pt', map_location=torch.device('cpu'))
+model_Drahterodieren.eval()
+model_Fraesen_Drehen.eval()
+model_Schleifen.eval()
+model_R_Modell.eval()
+
+Dic1 = {'<start>': 0, '<PAD>': 1, '<end>': 2, 'Sägen': 3, 'Drehen': 4, 'Rundschleifen': 5, 'Fräsen': 6, 'Messen': 7, 'Laserbeschriftung': 8, 'Flachschleifen': 9, 'Härten/Oberfläche': 10, 'Koordinatenschleifen': 11, 'Drahterodieren': 12, 'Startlochbohren': 13, 'Senkerodieren': 14, 'HSC-Fräsen': 15, 'Polieren': 16, 'Fremdvergabe': 17, 'Honen': 18, 'DF Dreh/Fräs-Z.-Mitlaufzeit': 19, 'Konstr. Werkzeuge': 20, 'Hartdrehen-CNC': 21, 'Drehen-CNC-Mitlaufzeit': 22}
+Dic2 = {0: '<start>', 1: '<PAD>', 2: '<end>', 3: 'Sägen', 4: 'Drehen', 5: 'Rundschleifen', 6: 'Fräsen', 7: 'Messen', 8: 'Laserbeschriftung', 9: 'Flachschleifen', 10: 'Härten/Oberfläche', 11: 'Koordinatenschleifen', 12: 'Drahterodieren', 13: 'Startlochbohren', 14: 'Senkerodieren', 15: 'HSC-Fräsen', 16: 'Polieren', 17: 'Fremdvergabe', 18: 'Honen', 19: 'DF Dreh/Fräs-Z.-Mitlaufzeit', 20: 'Konstr. Werkzeuge', 21: 'Hartdrehen-CNC', 22: 'Drehen-CNC-Mitlaufzeit'}
 
 db = SQLAlchemy(app)
-    
     
 class Material(Enum):
     MAT1 = 'Stahl - C45'
@@ -56,8 +69,7 @@ class Material(Enum):
     MAT24 = 'Superlegierungen - Inconel 625'
     MAT25 = 'Verbundwerkstoffe - GFK'
     
-
-        
+     
 class AdditionalData(Enum):
     DATA1 = "Sägen"
     DATA2 = "Messen"
@@ -69,10 +81,6 @@ class AdditionalData(Enum):
     DATA8 = "Polieren"
     
     
-
-
-
-
 class Part(db.Model):
     __tablename__ = 'part'
 
@@ -88,11 +96,83 @@ class Part(db.Model):
     #sawing = db.Column(db.Boolean, default=False, nullable=True)
 
 
-
 # Initialize the database
 with app.app_context():
     db.create_all()
 
+def createVoxel(objFilePath): 
+    subprocess.Popen(["Xvfb", ":99", "-screen", "0", "640x480x24"])
+    os.environ['DISPLAY'] = ':99'                                       
+    os.system( "./utils/binvox -d 64 " + objFilePath)
+
+def classification(voxelFilePath):
+    List = []
+    with open(voxelFilePath, 'rb') as file:
+        voxel_object = binvox_rw.read_as_3d_array(file)
+        voxel = voxel_object.data.astype(np.float32)
+        voxel = np.expand_dims(voxel, axis=0)
+        voxel = np.expand_dims(voxel, axis=0)
+        voxel = torch.tensor(voxel)
+
+    with torch.no_grad():
+        output = model_Drahterodieren(voxel)
+        print(output)
+        output = torch.round(output)
+        output = torch.squeeze(output)
+        if output.item() == 1:
+            List.append('Drahterodieren')
+
+    with torch.no_grad():
+        output = model_Fraesen_Drehen(voxel)
+        output = torch.round(output)
+        output = torch.squeeze(output)
+        if output[0] == 1:
+            List.append('Fräsen')
+        if output[1] == 1:
+            List.append('Drehen')
+
+    with torch.no_grad():
+        output = model_Schleifen(voxel)
+        output = torch.round(output)
+        output = torch.squeeze(output)
+        if output[0] == 1:
+            List.append('Flachschleifen')
+        if output[1] == 1:
+            List.append('Rundschleifen')
+        if output[2] == 1:
+            List.append('Koordinatenschleifen')
+
+    return List
+    
+def Reihenfolge(List, voxelFilePath):
+    with open(voxelFilePath, 'rb') as file:
+        voxel_object = binvox_rw.read_as_3d_array(file)
+        voxel = voxel_object.data.astype(np.float32)
+        voxel = np.expand_dims(voxel, axis=0)
+        voxel = np.expand_dims(voxel, axis=0)
+        voxel = torch.tensor(voxel)
+
+    List.insert(0, '<start>')
+    List.append('<end>')
+    Input_Vorgänge = np.ones((len(List), 1))
+
+    index1 = 0
+    for words in List:
+        index2 = Dic1[words]
+        Input_Vorgänge[index1] = index2
+        index1 += 1
+
+    with torch.no_grad():
+        outputs, features = model_R_Modell(voxel, torch.tensor(Input_Vorgänge[:-1], dtype=torch.int64), torch.tensor(Input_Vorgänge, dtype=torch.int64))
+        outputs = torch.round(outputs)
+        outputs = torch.squeeze(outputs)
+        Values, Indexes = torch.max(outputs, dim=1)
+        Result = []
+        for index in range(0, len(Indexes)):
+            Result.append(Dic2[int(Indexes[index])])
+
+    print(Result)
+    return Result
     
 def createFile(file, givenName, material):
     # Save file to the upload folder
@@ -100,30 +180,30 @@ def createFile(file, givenName, material):
     
     filename = str(uuid.uuid4())
     
-
-    
     stepStorageFilePath=os.path.join(app.config['UPLOAD_FOLDER'], filename+ '.stp')
     stlStorageFilePath=os.path.join(app.config['UPLOAD_FOLDER'], filename+ '.stl')
     objStorageFilePath=os.path.join(app.config['UPLOAD_FOLDER'], filename+ '.obj')
-    voxelStorageFilePath=os.path.join(app.config['UPLOAD_FOLDER'], filename+ '.npy')
+    voxelStorageFilePath=os.path.join(app.config['UPLOAD_FOLDER'], filename+ '.binvox')
 
     file.save(stepStorageFilePath)
 
     ## dirty, but Trimesh cannot run in flask in a thread
-    
     with app.app_context():
+
         subprocess.run(
-        ['python3', 'create_mesh.py', stepStorageFilePath, stlStorageFilePath, objStorageFilePath, voxelStorageFilePath],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        universal_newlines=True
-    )
-    
+            ['python3', 'create_meshes.py', stepStorageFilePath, stlStorageFilePath, objStorageFilePath],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True
+            )
+
+        createVoxel(objFilePath=objStorageFilePath)
+        #createVoxelTrimesh(objFilePath=objStorageFilePath, voxelFilePath=voxelStorageFilePath)
 
         # Store text input in SQLite database
         part = Part(originalFilename=originalFilename, 
                     stepStorageFilePath = stepStorageFilePath,
-                    stlStorageFilePath = stlStorageFilePath, 
+                    stlStorageFilePath  = stlStorageFilePath,
                     objStorageFilePath = objStorageFilePath,
                     voxelStorageFilePath = voxelStorageFilePath,
                     givenName=givenName,
@@ -145,7 +225,6 @@ def index():
 
         return redirect(url_for('index'))
     
-
     data=[]
     
     return render_template('index.html', data=data)
@@ -169,16 +248,12 @@ def upload_page():
 
     createFile(file, givenName, material)
     
-
         
     return redirect(url_for('parts'))
-
-
 
 @app.route('/uploadMultiple', methods=['GET'])
 def upload_multiple_page():
     return render_template('uploadMultiple.html')
-
 
 @app.route('/uploadMultiple', methods=['POST'])
 def upload_multiple():
@@ -210,8 +285,6 @@ def upload_multiple():
     else:
         return 'Invalid file format. Please upload a ZIP file.'
 
-    
-
 @app.route('/parts/delete/<int:part_id>', methods=['GET', 'POST'])
 def delete_part(part_id):
     part = Part.query.get(part_id)
@@ -239,14 +312,14 @@ def parts():
 @app.route('/parts/<int:part_id>', methods=['GET'])
 def view_part(part_id):
     part = Part.query.get_or_404(part_id)
+
+    #Zu der Liste Vorgaenge müssen noch die anderen Technologien hinzugeüfgt werden!!!
+    Vorgaenge = []
+    Vorgaenge_Classification = classification(voxelFilePath=part.voxelStorageFilePath)
+    Vorgaenge = Vorgaenge_Classification
+    Vorgangsfolge = Reihenfolge(List=Vorgaenge, voxelFilePath=part.voxelStorageFilePath)
     
-    
-    ### here comes the ml model
-    #vorgangsfolge = getVorgangsfolge(filenameVoxel)
-    ### here comes the ml model
-    vorgangsfolge=["a","vorgangsfolge"]
-    
-    return render_template('part.html', part=part, vorgangsfolge=vorgangsfolge)
+    return render_template('part.html', part=part, vorgangsfolge=Vorgangsfolge)
 
 @app.route('/parts/edit/<int:part_id>', methods=['POST'])
 def update_part(part_id):
@@ -267,13 +340,6 @@ def edit_part(part_id):
     part = Part.query.get_or_404(part_id)
 
     return render_template('edit_part.html', part=part, material=Material)
-
-def createVoxel(filename): 
-    ### function goes here
-    return filename
-
-def getVorgangsfolge(filenameVoxel):
-    return ["Materialentnahme", "CAM programmieren", "Weichfräsen", "Härten", "Drahterodieren", "Werkbank", "Montage"]
     
 if __name__ == '__main__':
-    app.run(debug=True, port=5001)
+    app.run(host="0.0.0.0", debug=True, port=5000)
