@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+
+
+{% block title %}Upload mehrere CAD Modelle{% endblock %}
+
+
+
+ {% block content %}
+ 
+ <div class="container">
+    <br>
+    <br>
+      <form method="post" enctype="multipart/form-data">
+        <div>
+          <label for="file" class="form-label">Zip Datei auswählen (*.ZIP)</label>
+          <input class="form-control" type="file" id="file" name="file" accept=".zip, .ZIP" required>
+        </div>
+        <div>
+  
+        </div>
+            <button class="btn btn-primary" type="submit">Upload</button>
+      </form>
+    
+    </div>
+{% endblock %}

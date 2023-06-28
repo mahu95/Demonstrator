@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+
+
+{% block title %}Bauteil Übersicht {% endblock %}
+
+
+ 
+ {% block content %}
+ 
+ 
+ <a href="/parts" class="btn btn-primary btn-lg mb-3">
+  <i class="bi bi-arrow-left"></i> Zurück
+</a>
+
+
+ 
+ <div class="container text-left">
+
+  <h1>CAD Modell: {{part.originalFilename}}</h1> 
+  <canvas id="myCanvas"></canvas>
+
+  <p>Bemerkung: {{ part.givenName }} </p>
+
+      <p>Erstellt: {{ part.created_at }} </p>
+ 
+
+<h1>Vorgangsfolge</h1> 
+  <div class="row ">
+    <div class="col float-left">
+      <div class="col text-muted">
+      <table class="table">
+        <thead>
+          <tr>
+          <th scope="col">Step Number</th>
+          <th scope="col">Arbeitsgang</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for vorgang in vorgangsfolge %}
+
+          <tr>
+          <th scope="row">1</th>
+          <td>{{ vorgang }}</td>
+          </tr>
+          {% endfor %}
+
+        </tbody>
+        </table>
+
+
+      </div>
+    </div>
+</div>	
+
+
+
+</div>
+
+
+<script>
+  var stlFile="/parts/stl/{{ part.id }}";
+</script>
+<script src="{{ url_for('static', filename='script.js') }}" type="module"></script>
+{% endblock %}

@@ -1,0 +1,73 @@
+<!-- dashboard.html -->
+{% extends 'base.html' %}
+
+{% block title %}
+    Start
+{% endblock %}
+
+{% block content %}
+
+
+
+   
+<div class="container">
+    <div class="row">
+        <div class="col-sm">
+
+
+            <div class="card" style="width: 18rem; height: 10rem;">
+                <div class="card-body">
+                   <h5 class="card-title"> <i class="bi bi-cloud-upload"></i> Bauteil hinzufügen</h5>
+                   <!-- <p class="card-text">Bauteil hinzufügen</p> -->
+                   <a href="/upload" class="card-link">Bauteil hinzufügen</a>
+                 </div>
+               </div>
+    
+        </div>
+
+        <div class="col-sm">
+
+
+          <div class="card" style="width: 18rem; height: 10rem;">
+              <div class="card-body">
+                 <h5 class="card-title"> <i class="bi bi-cloud-upload"></i> Mehrere Bauteile hinzufügen</h5>
+                 <!-- <p class="card-text">Bauteil hinzufügen</p> -->
+                 <a href="/uploadMultiple" class="card-link">Mehrere Bauteil hinzufügen</a>
+               </div>
+             </div>
+  
+      </div>
+
+
+
+      <div class="col-sm">
+       
+        <div class="card" style="width: 18rem; height: 10rem;">
+            <div class="card-body">
+               <h5 class="card-title"> <i class="bi bi-card-heading"></i> Bauteil Übersicht</h5>
+               <!-- <p class="card-text">Bauteil Übersicht</p> -->
+               <a href="/parts" class="card-link">Bauteil Übersicht</a>
+             </div>
+           </div>
+
+    </div>
+     
+      <div class="col-sm">
+
+        <div class="card" style="width: 18rem; height: 10rem;">
+            <div class="card-body">
+               <h5 class="card-title"> <i class="bi bi-gear"></i> Impressum</h5>
+               <!-- <p class="card-text">Impressum</p> -->
+               <a href="" class="card-link">Impressum</a>
+             </div>
+           </div>      </div>
+    </div>
+  </div>
+
+  <br><br>
+
+
+ 
+
+
+    {% endblock %}

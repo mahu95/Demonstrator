@@ -8,13 +8,21 @@ WORKDIR /app/Multiple_Classifier_Pipeline
 
 RUN apt-get update && apt-get install -y \
     libxrender1 \
-    #xvfb \
-    #libglu1-mesa \
-    #freeglut3-dev \
+    xvfb \
+    libglu1 \
+    freeglut3-dev \
+    libgl1 \
+    libxcursor1 \
+    libxft2 \
+    libxinerama1 \
     python3 \
-    python3-pip 
+    python3-pip \
+    nano
 
-RUN pip3 install --no-cache-dir -r requirements1.txt
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+RUN pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
 
 CMD [ "python3", "Pipeline.py" ]
 
