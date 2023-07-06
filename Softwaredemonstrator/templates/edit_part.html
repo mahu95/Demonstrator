@@ -1,0 +1,118 @@
+{% extends 'base.html' %}
+
+{% block title %}Edit Part{% endblock %}
+
+{% block content %}
+
+<div class="container">
+  <h1>
+    <a href="/parts" class="btn btn-lg">
+      <i class="bi bi-arrow-return-left"></i>
+    </a>
+    CAD Modell bearbeiten
+  </h1>
+
+  <div class="row">
+    <div class="col-md-6">
+      <canvas id="myCanvas"></canvas>
+    </div>
+
+    <div class="col-md-6">
+      <form method="POST" action="/parts/edit/{{ part.id }}">
+        <h4>Dateiname: {{part.originalFilename}}</h4>
+
+        <div class="row">
+          <div class="col-md-4">
+            <div class="mb-3">
+              <label for="drawingNumber" class="form-label">Zeichnungsnummer</label>
+              <input type="text" class="form-control" id="drawingNumber" name="drawingNumber" value="{% if part.drawingNumber %}{{ part.drawingNumber }}{% else %}{% endif %}">
+            </div>
+          </div>
+
+          <div class="col-md-4">
+            <div class="mb-3">
+              <label for="customer" class="form-label">Kunde</label>
+              <input type="text" class="form-control" id="customer" name="customer" value="{% if part.customer %}{{ part.customer }}{% else %}{% endif %}">
+            </div>
+          </div>
+
+          <div class="col-md-4">
+            <div class="mb-3">
+              <label for="orderNumber" class="form-label">Auftragsnummer</label>
+              <input type="text" class="form-control" id="orderNumber" name="orderNumber" value="{% if part.orderNumber %}{{ part.orderNumber }}{% else %}{% endif %}">
+            </div>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Material</label>
+          <select class="form-select" name="material">
+            <option value="" selected>Werkstoff auswählen</option>
+            {% for choice in material %}
+            <option value="{{ choice.name }}" {% if part.material == choice.name %}selected{% endif %}>{{ choice.value }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Zusatzinformationen:</label>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="isSawing" name="isSawing" {% if part.isSawing %}checked{% endif %}>
+            <label class="form-check-label" for="isSawing">Sägen</label>
+          </div>
+
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="isMeasuring" name="isMeasuring" {% if part.isMeasuring %}checked{% endif %}>
+            <label class="form-check-label" for="isMeasuring">Messen</label>
+          </div>
+
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="isLaserEngraving" name="isLaserEngraving" {% if part.isLaserEngraving %}checked{% endif %}>
+            <label class="form-check-label" for="isLaserEngraving">Lasergravur</label>
+          </div>
+
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="isHardening" name="isHardening" {% if part.isHardening %}checked{% endif %}>
+            <label class="form-check-label" for="isHardening">Härten</label>
+          </div>
+
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="isStartholeDrilling" name="isStartholeDrilling" {% if part.isStartholeDrilling %}checked{% endif %}>
+            <label class="form-check-label" for="isStartholeDrilling">Startlochbohren</label>
+          </div>
+
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="isSinkEroding" name="isSinkEroding" {% if part.isSinkEroding %}checked{% endif %}>
+            <label class="form-check-label" for="isSinkEroding">Senkerodieren</label>
+          </div>
+
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="isHoning" name="isHoning" {% if part.isHoning %}checked{% endif %}>
+            <label class="form-check-label" for="isHoning">Hohnen</label>
+          </div>
+
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="isPolishing" name="isPolishing" {% if part.isPolishing %}checked{% endif %}>
+            <label class="form-check-label" for="isPolishing">Polieren</label>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label for="text_input" class="form-label">Beschreibung</label>
+          <textarea class="form-control" id="text_input" name="comment" rows="3">{% if part.comment %}{{ part.comment }}{% else %}{% endif %}</textarea>
+        </div>
+
+        <div class="text-end">
+          <button type="submit" class="btn btn-primary">Speichern</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  var stlFile = "/parts/stl/{{ part.id }}";
+</script>
+<script src="{{ url_for('static', filename='script.js') }}" type="module"></script>
+
+{% endblock %}

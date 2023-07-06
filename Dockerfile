@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY . /app
 
-WORKDIR /app/Multiple_Classifier_Pipeline
+WORKDIR /app/Softwaredemonstrator
 
 RUN apt-get update && apt-get install -y \
     libxrender1 \
@@ -22,6 +22,8 @@ RUN apt-get update && apt-get install -y \
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 RUN pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+RUN pip3 install tensorflow-cpu
 
 EXPOSE 5000
 

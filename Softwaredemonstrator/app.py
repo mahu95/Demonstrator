@@ -23,22 +23,15 @@ import trimesh
 import os
 import subprocess
 
+from LSTM_Pipeline import Vorhersage
+from Classifier_Pipeline import classification
+from R_Modell_Pipeline import Sequenzierung
+from create_voxels import voxelization
+
 app = Flask(__name__, template_folder='templates', static_folder='static')
 app.config['SECRET_KEY'] = 'your-secret-key'
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///vorplanml.db'
-
-model_Drahterodieren = torch.jit.load('./model/model_DE_2023-06-22_19-44-33.pt') # map_location=torch.device('cuda:0'), if model should be loaded to GPU, by default CPU
-model_Fraesen_Drehen = torch.jit.load('./model/model_F&D_2023-06-23_12-46-35.pt') # map_location=torch.device('cuda:0'), if model should be loaded to GPU, by default CPU
-model_Schleifen = torch.jit.load('./model/model_Sch_2023-06-22_19-44-33.pt')
-model_R_Modell = torch.jit.load('./model/best_model_cnn_lstm.pt', map_location=torch.device('cpu'))
-model_Drahterodieren.eval()
-model_Fraesen_Drehen.eval()
-model_Schleifen.eval()
-model_R_Modell.eval()
-
-Dic1 = {'<start>': 0, '<PAD>': 1, '<end>': 2, 'Sägen': 3, 'Drehen': 4, 'Rundschleifen': 5, 'Fräsen': 6, 'Messen': 7, 'Laserbeschriftung': 8, 'Flachschleifen': 9, 'Härten/Oberfläche': 10, 'Koordinatenschleifen': 11, 'Drahterodieren': 12, 'Startlochbohren': 13, 'Senkerodieren': 14, 'HSC-Fräsen': 15, 'Polieren': 16, 'Fremdvergabe': 17, 'Honen': 18, 'DF Dreh/Fräs-Z.-Mitlaufzeit': 19, 'Konstr. Werkzeuge': 20, 'Hartdrehen-CNC': 21, 'Drehen-CNC-Mitlaufzeit': 22}
-Dic2 = {0: '<start>', 1: '<PAD>', 2: '<end>', 3: 'Sägen', 4: 'Drehen', 5: 'Rundschleifen', 6: 'Fräsen', 7: 'Messen', 8: 'Laserbeschriftung', 9: 'Flachschleifen', 10: 'Härten/Oberfläche', 11: 'Koordinatenschleifen', 12: 'Drahterodieren', 13: 'Startlochbohren', 14: 'Senkerodieren', 15: 'HSC-Fräsen', 16: 'Polieren', 17: 'Fremdvergabe', 18: 'Honen', 19: 'DF Dreh/Fräs-Z.-Mitlaufzeit', 20: 'Konstr. Werkzeuge', 21: 'Hartdrehen-CNC', 22: 'Drehen-CNC-Mitlaufzeit'}
 
 db = SQLAlchemy(app)
     
@@ -68,8 +61,7 @@ class Material(Enum):
     MAT23 = 'Nickel-Chrom-Legierungen - Nichrome'
     MAT24 = 'Superlegierungen - Inconel 625'
     MAT25 = 'Verbundwerkstoffe - GFK'
-    
-     
+        
 class AdditionalData(Enum):
     DATA1 = "Sägen"
     DATA2 = "Messen"
@@ -80,7 +72,6 @@ class AdditionalData(Enum):
     DATA7 = "Hohnen"
     DATA8 = "Polieren"
     
-    
 class Part(db.Model):
     __tablename__ = 'part'
 
@@ -90,124 +81,89 @@ class Part(db.Model):
     stlStorageFilePath = db.Column(db.String(100), nullable=False)
     objStorageFilePath = db.Column(db.String(100), nullable=False)
     voxelStorageFilePath = db.Column(db.String(100), nullable=False)
-    givenName = db.Column(db.String(100), nullable=True)
+    comment = db.Column(db.String(500), nullable=True)
+    customer = db.Column(db.String(100), nullable=True)
+    drawingNumber = db.Column(db.String(500), nullable=True)
+    orderNumber = db.Column(db.String(500), nullable=True)
+    drawingStorageFilePath = db.Column(db.String(100), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     material = db.Column(db.String(100), nullable=True)
-    #sawing = db.Column(db.Boolean, default=False, nullable=True)
-
+    isSawing = db.Column(db.Boolean, nullable=True)
+    isMeasuring = db.Column(db.Boolean, nullable=True)
+    isLaserEngraving = db.Column(db.Boolean, nullable=True)
+    isHardening = db.Column(db.Boolean, nullable=True)
+    isStartholeDrilling = db.Column(db.Boolean, nullable=True)
+    isSinkEroding = db.Column(db.Boolean, nullable=True)
+    isHoning = db.Column(db.Boolean, nullable=True)
+    isPolishing = db.Column(db.Boolean, nullable=True)
 
 # Initialize the database
 with app.app_context():
     db.create_all()
-
-def createVoxel(objFilePath): 
-    subprocess.Popen(["Xvfb", ":99", "-screen", "0", "640x480x24"])
-    os.environ['DISPLAY'] = ':99'                                       
-    os.system( "./utils/binvox -d 64 " + objFilePath)
-
-def classification(voxelFilePath):
-    List = []
-    with open(voxelFilePath, 'rb') as file:
-        voxel_object = binvox_rw.read_as_3d_array(file)
-        voxel = voxel_object.data.astype(np.float32)
-        voxel = np.expand_dims(voxel, axis=0)
-        voxel = np.expand_dims(voxel, axis=0)
-        voxel = torch.tensor(voxel)
-
-    with torch.no_grad():
-        output = model_Drahterodieren(voxel)
-        print(output)
-        output = torch.round(output)
-        output = torch.squeeze(output)
-        if output.item() == 1:
-            List.append('Drahterodieren')
-
-    with torch.no_grad():
-        output = model_Fraesen_Drehen(voxel)
-        output = torch.round(output)
-        output = torch.squeeze(output)
-        if output[0] == 1:
-            List.append('Fräsen')
-        if output[1] == 1:
-            List.append('Drehen')
-
-    with torch.no_grad():
-        output = model_Schleifen(voxel)
-        output = torch.round(output)
-        output = torch.squeeze(output)
-        if output[0] == 1:
-            List.append('Flachschleifen')
-        if output[1] == 1:
-            List.append('Rundschleifen')
-        if output[2] == 1:
-            List.append('Koordinatenschleifen')
-
-    return List
     
-def Reihenfolge(List, voxelFilePath):
-    with open(voxelFilePath, 'rb') as file:
-        voxel_object = binvox_rw.read_as_3d_array(file)
-        voxel = voxel_object.data.astype(np.float32)
-        voxel = np.expand_dims(voxel, axis=0)
-        voxel = np.expand_dims(voxel, axis=0)
-        voxel = torch.tensor(voxel)
+def createFile(file, comment, material,
+               customer,
+               drawingNumber,
+               orderNumber,
+               drawingFile,
+               isSawing,
+               isMeasuring,
+               isLaserEngraving,
+               isHardening,
+               isStartholeDrilling,
+               isSinkEroding,
+               isHoning,
+               isPolishing):
 
-    List.insert(0, '<start>')
-    List.append('<end>')
-    Input_Vorgänge = np.ones((len(List), 1))
-
-    index1 = 0
-    for words in List:
-        index2 = Dic1[words]
-        Input_Vorgänge[index1] = index2
-        index1 += 1
-
-    with torch.no_grad():
-        outputs, features = model_R_Modell(voxel, torch.tensor(Input_Vorgänge[:-1], dtype=torch.int64), torch.tensor(Input_Vorgänge, dtype=torch.int64))
-        outputs = torch.round(outputs)
-        outputs = torch.squeeze(outputs)
-        Values, Indexes = torch.max(outputs, dim=1)
-        Result = []
-        for index in range(0, len(Indexes)):
-            Result.append(Dic2[int(Indexes[index])])
-
-    print(Result)
-    return Result
-    
-def createFile(file, givenName, material):
     # Save file to the upload folder
     originalFilename = file.filename
     
+    if drawingFile:
+        originalDrawingEnding = os.path.splitext(drawingFile.filename)[1] 
+    else:
+        originalDrawingEnding= None
+
     filename = str(uuid.uuid4())
     
     stepStorageFilePath=os.path.join(app.config['UPLOAD_FOLDER'], filename+ '.stp')
     stlStorageFilePath=os.path.join(app.config['UPLOAD_FOLDER'], filename+ '.stl')
     objStorageFilePath=os.path.join(app.config['UPLOAD_FOLDER'], filename+ '.obj')
     voxelStorageFilePath=os.path.join(app.config['UPLOAD_FOLDER'], filename+ '.binvox')
-
+    
+    if drawingFile:
+        drawingStorageFilePath=os.path.join(app.config['UPLOAD_FOLDER'], filename+ originalDrawingEnding)
+        drawingFile.save(drawingStorageFilePath)
+    else:
+        drawingStorageFilePath=None
     file.save(stepStorageFilePath)
 
     ## dirty, but Trimesh cannot run in flask in a thread
+    
     with app.app_context():
-
-        subprocess.run(
-            ['python3', 'create_meshes.py', stepStorageFilePath, stlStorageFilePath, objStorageFilePath],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            universal_newlines=True
-            )
-
-        createVoxel(objFilePath=objStorageFilePath)
-        #createVoxelTrimesh(objFilePath=objStorageFilePath, voxelFilePath=voxelStorageFilePath)
-
+        subprocess.run(['python3', 'create_meshes.py', stepStorageFilePath, stlStorageFilePath, objStorageFilePath], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        
+        voxelization(objFilePath=objStorageFilePath, voxelFilePath=voxelStorageFilePath)
+    
         # Store text input in SQLite database
         part = Part(originalFilename=originalFilename, 
                     stepStorageFilePath = stepStorageFilePath,
-                    stlStorageFilePath  = stlStorageFilePath,
+                    stlStorageFilePath = stlStorageFilePath, 
                     objStorageFilePath = objStorageFilePath,
                     voxelStorageFilePath = voxelStorageFilePath,
-                    givenName=givenName,
-                    material=material)
+                    comment=comment,
+                    customer = customer,
+                    drawingNumber = drawingNumber,
+                    orderNumber = orderNumber,
+                    drawingStorageFilePath = drawingStorageFilePath,
+                    material=material,
+                    isSawing=isSawing,
+                    isMeasuring=isMeasuring,
+                    isLaserEngraving=isLaserEngraving,
+                    isHardening=isHardening,
+                    isStartholeDrilling=isStartholeDrilling,
+                    isSinkEroding=isSinkEroding,
+                    isHoning=isHoning,
+                    isPolishing=isPolishing)
         db.session.add(part)
         db.session.commit()
 
@@ -238,17 +194,64 @@ def upload():
 def upload_page():
     # Get data from the form
     file = request.files['file']
-    givenName = request.form['givenName']
-    #sawing = request.form['sawing']
+    comment = request.form['comment']
 
+    drawingFile = request.files['drawingFile']
 
     material = request.form.get('material')
     if material == '':
         material=None
-
-    createFile(file, givenName, material)
-    
         
+    isSawing = request.form.get('isSawing')
+    isSawing = bool(isSawing) if isSawing else None
+
+    isMeasuring = request.form.get('isMeasuring')
+    isMeasuring = bool(isMeasuring) if isMeasuring else None
+    
+    isLaserEngraving = request.form.get('isLaserEngraving')
+    isLaserEngraving = bool(isLaserEngraving) if isLaserEngraving else None
+    
+    isHardening = request.form.get('isHardening')
+    isHardening = bool(isHardening) if isHardening else None
+    
+    isStartholeDrilling = request.form.get('isStartholeDrilling')
+    isStartholeDrilling = bool(isStartholeDrilling) if isStartholeDrilling else None
+    
+    isSinkEroding = request.form.get('isSinkEroding')
+    isSinkEroding = bool(isSinkEroding) if isSinkEroding else None
+
+    isHoning = request.form.get('isHoning')
+    isHoning = bool(isHoning) if isHoning else None
+
+    isPolishing = request.form.get('isPolishing')
+    isPolishing = bool(isPolishing) if isPolishing else None
+
+    customer = request.form.get('customer')
+    if customer == '':
+        customer=None
+        
+    drawingNumber = request.form.get('drawingNumber')
+    if drawingNumber == '':
+        drawingNumber=None
+        
+    orderNumber = request.form.get('orderNumber')
+    if orderNumber == '':
+        orderNumber=None
+
+    createFile(file, comment, material,
+                customer,
+                drawingNumber,
+                orderNumber,
+                drawingFile,
+                isSawing,
+                isMeasuring,
+                isLaserEngraving,
+                isHardening,
+                isStartholeDrilling,
+                isSinkEroding,
+                isHoning,
+                isPolishing)
+    
     return redirect(url_for('parts'))
 
 @app.route('/uploadMultiple', methods=['GET'])
@@ -279,7 +282,7 @@ def upload_multiple():
                         file_storage = FileStorage(stream=file, filename=name)
 
                     # Create a Part object using the byte stream
-                    createFile(file_storage, None, None, None)
+                    createFile(file_storage, None, None, None, None, None, None, None, None, None, None, None, None, None, None)
         
         return redirect(url_for('parts'))
     else:
@@ -313,24 +316,100 @@ def parts():
 def view_part(part_id):
     part = Part.query.get_or_404(part_id)
 
-    #Zu der Liste Vorgaenge müssen noch die anderen Technologien hinzugeüfgt werden!!!
     Vorgaenge = []
+
     Vorgaenge_Classification = classification(voxelFilePath=part.voxelStorageFilePath)
     Vorgaenge = Vorgaenge_Classification
-    Vorgangsfolge = Reihenfolge(List=Vorgaenge, voxelFilePath=part.voxelStorageFilePath)
+
+    if part.isSawing == True:
+        Vorgaenge.append('Sägen')
+    if part.isHardening == True:
+        Vorgaenge.append('Härten/Oberfläche')
+    if part.isMeasuring == True:
+        Vorgaenge.append('Messen')
+    if part.isLaserEngraving == True:
+        Vorgaenge.append('Laserbeschriftung')
+    if part.isStartholeDrilling == True:
+        Vorgaenge.append('Startlochbohren')
+    if part.isSinkEroding == True:
+        Vorgaenge.append('Senkerodieren')
+    if part.isHoning == True:
+        Vorgaenge.append('Honen')
+    if part.isPolishing == True:
+        Vorgaenge.append('Polieren')
+
+    #Vorgangsfolge = Reihenfolge(List=Vorgaenge, voxelFilePath=part.voxelStorageFilePath)
+    Vorgangsfolge = Vorhersage(Vorgaenge=Vorgaenge)
     
     return render_template('part.html', part=part, vorgangsfolge=Vorgangsfolge)
 
 @app.route('/parts/edit/<int:part_id>', methods=['POST'])
 def update_part(part_id):
     part = Part.query.get_or_404(part_id)
-    part.givenName = request.form['givenName']
     
+    isSawing = request.form.get('isSawing')
+    isSawing = bool(isSawing) if isSawing else None
+    part.isSawing = isSawing
+
+    isMeasuring = request.form.get('isMeasuring')
+    isMeasuring = bool(isMeasuring) if isMeasuring else None
+    part.isMeasuring=isMeasuring
+    
+    isLaserEngraving = request.form.get('isLaserEngraving')
+    isLaserEngraving = bool(isLaserEngraving) if isLaserEngraving else None
+    part.isLaserEngraving = isLaserEngraving
+    
+    isHardening = request.form.get('isHardening')
+    isHardening = bool(isHardening) if isHardening else None
+    part.isHardening=isHardening
+    
+    isStartholeDrilling = request.form.get('isStartholeDrilling')
+    isStartholeDrilling = bool(isStartholeDrilling) if isStartholeDrilling else None
+    part.isStartholeDrilling= isStartholeDrilling
+    
+    isSinkEroding = request.form.get('isSinkEroding')
+    isSinkEroding = bool(isSinkEroding) if isSinkEroding else None
+    part.isSinkEroding=isSinkEroding
+    
+    isHoning = request.form.get('isHoning')
+    isHoning = bool(isHoning) if isHoning else None
+    part.isHoning=isHoning
+
+    isPolishing = request.form.get('isPolishing')
+    isPolishing = bool(isPolishing) if isPolishing else None
+    part.isPolishing=isPolishing
+
+
+
     material = request.form.get('material')
     if material == '':
         material=None
 
+
+    drawingNumber = request.form.get('drawingNumber')
+    if drawingNumber == '':
+        drawingNumber=None
+
+    customer = request.form.get('customer')
+    if customer == '':
+        customer=None
+        
+    orderNumber = request.form.get('orderNumber')
+    if orderNumber == '':
+        orderNumber=None
+        
+    comment = request.form.get('comment')
+    if comment == '':
+        comment=None
+        
+
+    part.comment = comment
+    part.customer = customer
     part.material = material
+    part.drawingNumber = drawingNumber
+    part.orderNumber = orderNumber
+
+
 
     db.session.commit()
     return redirect(url_for('parts'))
