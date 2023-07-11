@@ -36,4 +36,7 @@ if __name__ == "__main__":
 
     createMeshes(stepFilePath=stepStorageFilePath, stlFilePath=stlStorageFilePath, objFilePath=objStorageFilePath)
 
+# step_Path = 'C:/Users/Forschung/Desktop/Daten/CAD/STEP/17002-211920/170002_00038.stp'
+# createMeshes(stepFilePath=step_Path, stlFilePath='C:/Users/Forschung/Desktop/Daten/', objFilePath='C:/Users/Forschung/Desktop/Daten/')
+
 

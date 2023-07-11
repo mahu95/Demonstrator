@@ -131,8 +131,9 @@ def createFile(file, comment, material,
     ## dirty, but Trimesh cannot run in flask in a thread
     
     with app.app_context():
-        subprocess.run(['python3', 'create_meshes.py', stepStorageFilePath, stlStorageFilePath, objStorageFilePath], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
-        
+        subprocess.run(['python', 'create_meshes.py', stepStorageFilePath, stlStorageFilePath, objStorageFilePath], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        #subprocess.run(['python3', 'create_meshes.py', stepStorageFilePath, stlStorageFilePath, objStorageFilePath], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+
         voxelization(objFilePath=objStorageFilePath, voxelFilePath=voxelStorageFilePath)
     
         # Store text input in SQLite database
