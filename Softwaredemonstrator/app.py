@@ -11,19 +11,10 @@ import os
 from werkzeug.datastructures import FileStorage
 from enum import Enum
 from sqlalchemy import JSON
-import trimesh
-import gmsh
-import threading
-import sqlite3
 
-from utils import binvox_rw
-import numpy as np
-import torch
-import trimesh
 import os
 import subprocess
 
-from LSTM_Pipeline import Vorhersage
 from Classifier_Pipeline import classification
 from R_Modell_Pipeline import Sequenzierung
 from create_voxels import voxelization
@@ -167,13 +158,11 @@ def createFile(file, comment, material,
         db.session.add(part)
         db.session.commit()
 
-
 @app.route('/parts/stl/<int:part_id>', methods=['GET'])
 def get_stl(part_id):
     part = Part.query.get_or_404(part_id)
     stl_path = part.stlStorageFilePath
     return send_file(stl_path, as_attachment=True)
-
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -184,7 +173,6 @@ def index():
     data=[]
     
     return render_template('index.html', data=data)
-
 
 @app.route('/upload', methods=['GET'])
 def upload():
@@ -338,8 +326,30 @@ def view_part(part_id):
     if part.isPolishing == True:
         Vorgaenge.append('Polieren')
 
-    #Vorgangsfolge = Reihenfolge(List=Vorgaenge, voxelFilePath=part.voxelStorageFilePath)
-    Vorgangsfolge = Vorhersage(Vorgaenge=Vorgaenge)
+    Vorgangsfolge = Sequenzierung(List=Vorgaenge, voxelFilePath=part.voxelStorageFilePath)
+
+    # Some hard-coded rules to solve for some prediction errors!
+    set1 = set(Vorgaenge)
+    set2 = set(Vorgangsfolge)
+
+    non_matching = set2 - set1
+    Vorgangsfolge = [x for x in Vorgangsfolge if x not in non_matching]
+
+    Vorgangsfolge.extend(set1-set2)
+
+    if 'Sägen' in Vorgangsfolge and Vorgangsfolge[0] != 'Sägen':
+        index = Vorgangsfolge.index('Sägen')
+        Vorgangsfolge.insert(0, Vorgangsfolge.pop(index))
+
+    if 'Laserbeschriftung' in Vorgangsfolge and Vorgangsfolge[-1:] != 'Laserbeschriftung':
+        index = Vorgangsfolge.index('Laserbeschriftung')
+        Vorgangsfolge.append(Vorgangsfolge.pop(index))
+
+    if 'Startlochbohren' in Vorgangsfolge:
+        index1 = Vorgangsfolge.index('Startlochbohren')
+        if Vorgangsfolge[index1+1] != 'Drahterodieren':
+            index2 = Vorgangsfolge.index('Drahterodieren')
+            Vorgangsfolge.insert(index2, Vorgangsfolge.pop(index1))
     
     return render_template('part.html', part=part, vorgangsfolge=Vorgangsfolge)
 
