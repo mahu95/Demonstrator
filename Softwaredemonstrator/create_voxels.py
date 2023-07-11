@@ -6,7 +6,7 @@ def voxelization(objFilePath, voxelFilePath):
     #os.environ['DISPLAY'] = ':99'                                       
     #os.system( "./utils/binvox -d 64 " + objFilePath)
 
-    subprocess.run(["./utils/binvox_win -d 64 " + objFilePath])
+    subprocess.run("./utils/binvox_win -d 64 " + objFilePath)
 
     # mesh = trimesh.load_mesh(objFilePath)
     # [x,y,z] = mesh.bounding_box_oriented.extents
