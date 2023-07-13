@@ -6,7 +6,7 @@ import Stats from 'https://cdn.skypack.dev/three@0.128.0/examples/jsm/libs/stats
 
 import { STLLoader } from 'https://cdn.skypack.dev/three@0.128.0/examples/jsm/loaders/STLLoader.js';
 
-
+import { OBJLoader } from 'https://cdn.skypack.dev/three@0.128.0/examples/jsm/loaders/OBJLoader.js';
 
 const container = document.getElementById( 'myCanvas' );
 //document.body.appendChild( container );
@@ -65,20 +65,41 @@ const material = new THREE.MeshPhysicalMaterial({
 })
 
 const scale=0.005
-const loader = new STLLoader()
+// const loader = new STLLoader()
+// loader.load(
+//     stlFile,
+//     function (geometry) {
+//         const mesh = new THREE.Mesh(geometry, material)
+// 		mesh.scale.set( scale, scale, scale );
+//         mesh.name = 'part'
+//         scene.add(mesh)
+//     },
+//     (xhr) => {
+//         console.log((xhr.loaded / xhr.total) * 100 + '% loaded')
+//     },
+//     (error) => {
+//         console.log(error)
+//     }
+// )
+
+const loader = new OBJLoader();
 loader.load(
-    stlFile,
-    function (geometry) {
-        const mesh = new THREE.Mesh(geometry, material)
-		mesh.scale.set( scale, scale, scale );
-        mesh.name = 'part'
-        scene.add(mesh)
-    },
+    objFile,
+	function ( object ) {
+        object.traverse(function (child) {
+            object.scale.set(scale, scale, scale);
+            if (child instanceof THREE.Mesh) {
+              child.material = material;
+            }
+          });
+		scene.add( object );
+
+	},
     (xhr) => {
-        console.log((xhr.loaded / xhr.total) * 100 + '% loaded')
+        console.log((xhr.loaded / xhr.total) * 100 + '% loaded');
     },
     (error) => {
-        console.log(error)
+        console.log(error);
     }
 )
 

@@ -7,6 +7,7 @@ import io
 import tempfile
 import subprocess
 import os
+from collections import OrderedDict
 
 from werkzeug.datastructures import FileStorage
 from enum import Enum
@@ -69,7 +70,6 @@ class Part(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     originalFilename = db.Column(db.String(100), nullable=False)
     stepStorageFilePath = db.Column(db.String(100), nullable=False)
-    stlStorageFilePath = db.Column(db.String(100), nullable=False)
     objStorageFilePath = db.Column(db.String(100), nullable=False)
     voxelStorageFilePath = db.Column(db.String(100), nullable=False)
     comment = db.Column(db.String(500), nullable=True)
@@ -117,7 +117,6 @@ def createFile(file, comment, material,
     filename = str(uuid.uuid4())
     
     stepStorageFilePath=os.path.join(app.config['UPLOAD_FOLDER'], filename+ '.stp')
-    stlStorageFilePath=os.path.join(app.config['UPLOAD_FOLDER'], filename+ '.stl')
     objStorageFilePath=os.path.join(app.config['UPLOAD_FOLDER'], filename+ '.obj')
     voxelStorageFilePath=os.path.join(app.config['UPLOAD_FOLDER'], filename+ '.binvox')
     
@@ -131,15 +130,14 @@ def createFile(file, comment, material,
     ## dirty, but Trimesh cannot run in flask in a thread
     
     with app.app_context():
-        subprocess.run(['python', 'create_meshes.py', stepStorageFilePath, stlStorageFilePath, objStorageFilePath], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
-        #subprocess.run(['python3', 'create_meshes.py', stepStorageFilePath, stlStorageFilePath, objStorageFilePath], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        subprocess.run(['python', 'create_meshes.py', stepStorageFilePath, objStorageFilePath], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        #subprocess.run(['python3', 'create_meshes.py', stepStorageFilePath, objStorageFilePath], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
 
         voxelization(objFilePath=objStorageFilePath, voxelFilePath=voxelStorageFilePath)
     
         # Store text input in SQLite database
         part = Part(originalFilename=originalFilename, 
                     stepStorageFilePath = stepStorageFilePath,
-                    stlStorageFilePath = stlStorageFilePath, 
                     objStorageFilePath = objStorageFilePath,
                     voxelStorageFilePath = voxelStorageFilePath,
                     comment=comment,
@@ -159,11 +157,11 @@ def createFile(file, comment, material,
         db.session.add(part)
         db.session.commit()
 
-@app.route('/parts/stl/<int:part_id>', methods=['GET'])
-def get_stl(part_id):
+@app.route('/parts/obj/<int:part_id>', methods=['GET'])
+def get_obj(part_id):
     part = Part.query.get_or_404(part_id)
-    stl_path = part.stlStorageFilePath
-    return send_file(stl_path, as_attachment=True)
+    obj_path = part.objStorageFilePath
+    return send_file(obj_path, as_attachment=True)
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -286,7 +284,6 @@ def delete_part(part_id):
         
         try:
             os.remove( part.stepStorageFilePath)
-            os.remove( part.stlStorageFilePath)
             os.remove( part.objStorageFilePath)
             os.remove( part.voxelStorageFilePath)
         except:
@@ -351,6 +348,15 @@ def view_part(part_id):
         if Vorgangsfolge[index1+1] != 'Drahterodieren':
             index2 = Vorgangsfolge.index('Drahterodieren')
             Vorgangsfolge.insert(index2, Vorgangsfolge.pop(index1))
+
+    seen = OrderedDict()
+    removed_double = []
+    for item in Vorgangsfolge:
+        if item not in seen:
+            seen[item] = None
+            removed_double.append(item)
+    
+    Vorgangsfolge = removed_double
     
     return render_template('part.html', part=part, vorgangsfolge=Vorgangsfolge)
 
